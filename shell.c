@@ -72,7 +72,7 @@ void splitCMD(char* userCommand, char** commandParams, int *argc, int *singleArr
 int execArgs(char** commandParams)
 {
 
-	printf("You are inside execArgs\n");
+	//printf("You are inside execArgs\n");
   //forking a child, pid is process identifier
   	pid_t pid = fork();
 	char currentDir[bufferSize];
@@ -109,7 +109,7 @@ int execArgs(char** commandParams)
 //====================================================================================//
 int execArgsSingleArrowRedirect(char** commandParams, char** fileName)
 {
-	printf("You are insdie SingleexecRedirect\n");
+	//printf("You are insdie SingleexecRedirect\n");
 
   //forking a child, pid is process identifier
   pid_t pid = fork();
@@ -145,7 +145,7 @@ int execArgsSingleArrowRedirect(char** commandParams, char** fileName)
 //=================================================================================//
 int execArgsDoubleArrowRedirect(char** commandParams, char** fileName)
 {
-	printf("You are insdie DoubleExecRedirect\n");
+	//printf("You are insdie DoubleExecRedirect\n");
 
   //forking a child, pid is process identifier
   pid_t pid = fork();
@@ -219,7 +219,7 @@ int execArgsBackGround(char** commandParams)
 
 int execArgsReverseArrow(char** commandParams, char** fileName)
 {
-	printf("You are insdie ReverseArrowexec\n");
+	//printf("You are insdie ReverseArrowexec\n");
 
   //forking a child, pid is process identifier
   pid_t pid = fork();
@@ -255,42 +255,74 @@ int execArgsReverseArrow(char** commandParams, char** fileName)
   return 0;
 }
 
-int execArgsPiPe(char** commandParams, char** pipedParsedParams, char** fileName){
+ int execArgsPipe(char** commandParams, char** pipedParsedParams, char** fileName, int *redirect){
 
+	pid_t p1, p2;
+	 int fd[2];
 
-	printf("You are inside piped\n");
+	 if(pipe(fd) == -1)
+	 	printf("Error, can't create pipe!\n");
 
-	pid_t pid = fork();
-	int fileDescriptor[2];
+	 if((p1=fork())<0)
+	 	printf("p1 Forking failed!\n");
 
-	if(pipe(fileDescriptor != 0))
-		printf("Error, can't create pipe!\n");
+	int source = open(*fileName, O_RDWR , 0644);
 
-	if(pid<0)
-		printf("Forking failed!\n");
+	 //create piping
+	 if(p1==0)
+	 {
+	 	//printf("command 1 is %s, command 2 is %s \n", commandParams[0], pipedParsedParams[0]);
+	 	dup2(source, 0);
+	 	close(fd[0]);//close read end
+	 	dup2(fd[1], 1);
+	 	close(fd[1]);//close write end
+	 	
+	 	if(execvp(commandParams[0], commandParams) < 0)
+	 	{
+	 	perror("Error with command 1");
+	 	return 0;
+	 	}
+	 }
 
-	//create piping
-	if(pid==0)
-	{
-		dup2(fileDescriptor[1], 1);
-		close(fileDescriptor[0]);
-		close(fileDescriptor[1]);
-		execvp(commandParams[0], commandParams);
-		error("Error with command 1");
-		return 0;
+	 else if(p1==0 && *redirect ==1)
+	 {
+	 	 if(p1==0)
+	 {
+	 	//printf("command 1 is %s, command 2 is %s \n", commandParams[0], pipedParsedParams[0]);
+	 	close(fd[0]);//close read end
+	 	dup2(fd[1], 1);
+	 	close(fd[1]);//close write end
+	 	close(source);
+	 	if(execvp(commandParams[0], commandParams) < 0)
+	 	{
+	 	perror("Error with command 1");
+	 	return 0;
+	 	}
+	 }
+	 }
+	 else
+	 {
+	 	//printf("command 1 is %s, command 2 is %s \n", commandParams[0], pipedParsedParams[0]);
+	 	if((p2=fork())<0)
+	 	printf("p2 Forking failed!\n");
+
+	 	if(p2 ==0){
+	 	close(fd[1]);//close read end
+	 	dup2(fd[0], 0);
+	 	close(fd[0]);
+	 	if(execvp(pipedParsedParams[0], pipedParsedParams) < 0){
+	 	perror("Error with command 2");
+	 	return 0;
+	 	}
+	 }//end of outer if
+	 else{
+
+	 	wait(NULL);
+	 	wait(NULL);
+	 }
+	// return 0;
 	}
-	else
-	{
-		dup2(fileDescriptor[0], 0);
-		close(fileDescriptor[0]);
-		close(fileDescriptor[1]);
-		evecvp(pipedParsedParams[0], pipedParsedParams);
-		error("Error with command 2");
-		return 0;
-	}
-
-	return 0;
-}
+}//end of function
 
 //====================================================================//
 int main(){
@@ -325,10 +357,46 @@ int main(){
    
     splitCMD(userCommand, commandParams, &argc, &singleArrow, &doubleArrow, &background, &reverseArrow, &pipe);
 
-    //printf("Single Arrow is %d\n, Double Arrow is %d\n, Background process is %d\n, Reverse Arrow is %d\n, pipe is %d\n", singleArrow, doubleArrow, background, reverseArrow, pipe);
+   // printf("Single Arrow is %d\n Double Arrow is %d\n Background process is %d\n Reverse Arrow is %d\n pipe is %d\n", singleArrow, doubleArrow, background, reverseArrow, pipe);
 
+ //    commandParams[0] = "ls";
+
+	// pipedParsedParams[0] = "grep";
+	// pipedParsedParams[1] = "t";
     //====================Output redirecting : Single Arrow and Double Arrow =======================================================//
-    if(singleArrow==1)//single arrow detected
+
+	  if(pipe==1){
+	 	char* fileName;
+	 	int *redirect = 0;
+	 	//printf("You are in pipe string parsing\n");
+	// 	//scenrio 1 ls/cat first
+	 	for(int i =0; i < argc; i++){
+	 		if(strcmp((commandParams[i]), "|")==0){
+	 			pipedParsedParams[0] = commandParams[i+1];//if | dected, then store the command after | into the pipeparsed array
+	 			printf("you are here");
+	 		// 	if(strcmp(commandParams[i+2],">")==0 || strcmp(commandParams[i+2],">>")==0){
+
+	 		// 		*redirect = 1;
+	 		// 		commandParams[i+2] = "\0";
+	 		// 	fileName = commandParams[i+3];
+	 		// 	printf("%s", commandParams[i+3]);
+	 		// }
+	 			commandParams[i]="\0";	
+	 			pipe =0;
+	 			for(int a = i; a < argc; a++)
+	 			{
+	 				commandParams[a] = "\0";
+	 			}
+	 		}//end of if
+	 	}//end of for
+	 	commandParams[1] = NULL;
+	 	pipedParsedParams[1] = NULL;
+	 	reverseArrow =0;
+
+ 	 execArgsPipe(commandParams,pipedParsedParams, &fileName, redirect);
+	}
+
+     if(singleArrow==1)//single arrow detected
     {
     	char* fileName;
     	for(int i = 0;i < argc;i++){
@@ -357,6 +425,8 @@ int main(){
     }
     //===================================================
     else if(background==1){
+
+    	//printf("You are in background\n");
     	for(int i = 0;i < argc;i++){
     	if(strcmp(commandParams[i],"&")==0){
     		commandParams[i]='\0';
@@ -367,8 +437,9 @@ int main(){
 	}
 	
 	else if(reverseArrow==1){
+		//printf("Yuo are insdie reverse arrow\n");
 		char* fileName;
-    	for(int i = 0;i < argc;i++){
+    	for(int i = 0;i < argc;i++){       
     	if(strcmp(commandParams[i],"<")==0){
     		commandParams[i]='\0';
     		fileName = commandParams[i+1];
@@ -379,37 +450,6 @@ int main(){
     execArgsReverseArrow(commandParams, &fileName);
 	}
 
-	else if(pipe==1){
-		char* fileName;
-
-		//scenrio 1 ls/cat first
-
-
-
-		//scenrio 2  > first
-    	for(int i = 0;i < argc;i++){
-    	if(strcmp(commandParams[i],"")==0){
-    		commandParams[i]='\0';
-    		fileName = commandParams[i+1];
-    		reverseArrow = 0;//reset reverseArrow boolean
-
-   		//scenrio 3 >> first
-
-
-
-    	//secnrio 4 < first
-
-
-
-
-    	}//end of if
-    }//end of for
-
-
-
-
- execArgsReverseArrow(commandParams, &fileName);
-	}
 
 
 
@@ -419,11 +459,11 @@ int main(){
     //=================================================================================================================================//
 
  	//showing input arguments
-    for(int i =0;i<argc;i++)
-     {
-     	//if(commandParams[i]=="&");
-       printf("%s", commandParams[i]);
-     }
+    // for(int i =0;i<argc;i++)
+    //  {
+    //  	//if(commandParams[i]=="&");
+    //    printf("%s" , commandParams[i]);
+    //  }
 
     
   }
